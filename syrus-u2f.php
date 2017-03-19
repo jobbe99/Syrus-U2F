@@ -1,4 +1,7 @@
 <?php
+/*
+Plugin Name: Syrus U2F
+*/
 
 //funzione per la stampa del form per il secondo fattore d'autenticazione
 function syrus_u2f_sign_request($user, $redirect, $password, $token) {
@@ -90,8 +93,8 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
         </h1>
         <form method="POST" id="syrus_u2f_form">
             <label for="syrus_u2f_otp">OTP</label>
-            <input type="text" name="syrus_u2f_opt" id="syrus_u2f_opt" value="">
-            <input type="hidden" name="syrus_u2f_opt_hidden" value="<?php echo $token; ?>">
+            <input type="text" name="syrus_u2f_otp" id="syrus_u2f_opt" value="">
+            <input type="hidden" name="syrus_u2f_otp_hidden" value="<?php echo $token; ?>">
             <input type="hidden" name="syrus_u2f_username" value="<?php echo $username; ?>">
             <input type="hidden" name="syrus_u2f_password" value="<?php echo $password; ?>">
             <?php if (isset($_POST['rememberme'])) { ?>
@@ -183,8 +186,7 @@ function syrus_u2f_role_require_mfa($user){
 }
 
 //funzione che inizializza la sezione per il secondo fattore d'autenticazione
-function syrus_u2f_start_second_factor($user, $password, $redirect_to=NULL){
-
+function syrus_u2f_start_second_factor($user, $password, $mail, $redirect_to=NULL){
     if (!$redirect_to){
         // Some custom themes do not provide the redirect_to value
         // Admin page is a good default
@@ -195,7 +197,6 @@ function syrus_u2f_start_second_factor($user, $password, $redirect_to=NULL){
     //genero la OTP che invio all'utente
     $token = uniqid();
     //recupero l'email dell'utente
-    $mail = $user->user_mail;
     //invio la password all'utente
     wp_mail($mail, "OTP", $token);
     //rimando alla pagina d'autenticazione del secondo fattore
@@ -212,10 +213,10 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
   }
 
   //se e' abilitato il doppio fattore
-  if(!syrus_u2f_auth_enable()) {
-    error_log("Syrus U2F disabled, skipping two factor authentication");
-    return;
-  }
+  // if(!syrus_u2f_auth_enabled()) {
+    // error_log("Syrus U2F disabled, skipping two factor authentication");
+    // return;
+  // }
 
   //probabilmente serve al momento dell'insert del doppio fattore
   if (isset($_POST['syrus_u2f_otp'])) {
@@ -230,7 +231,7 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
       if(strcmp($otp, $otp_hidden) == 0) {
         //login corretto
         //recupero il login originale
-        $user = wp_authenticate_username_password(null, $usename, $password);
+        $user = wp_authenticate_username_password(null, $username, $password);
         error_log("Syrus U2F authentication successful");
         return $user;
       }
@@ -250,25 +251,24 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
       }
 
       //se l'utente ha un ruolo per cui non e' previsto il 2fa , autenticazione normale
-      if(!syrus_u2f_role_require_mfa($user)){
-          error_log("Skipping 2FA for user: $username with roles: " . print_r($user->roles, true));
-          return;
-      }
+      // if(!syrus_u2f_role_require_mfa($user)){
+          // error_log("Skipping 2FA for user: $username with roles: " . print_r($user->roles, true));
+          // return;
+      // }
 
       //rimuove la normale procedura d'autenticazione
       remove_action('authenticate', 'wp_authenticate_username_password', 20);
       $user = wp_authenticate_username_password(NULL, $username, $password);
+      $mail = $user->user_email;
       if (!is_a($user, 'WP_User')) {
           // non viene autenticato perche' rimossa la normale autenticazione, ritorna errore
           return $user;
       } else {
           error_log("Primary auth succeeded, starting second factor for $username");
-          syrus_u2f_start_second_factor($user, $password);
+          syrus_u2f_start_second_factor($user, $password, $mail);
       }
   }
   error_log('Starting primary authentication');
-
-
 }
 
-  add_filter('authenticate', 'syrus_u2f_authenticate_user', 10, 3);
+add_filter('authenticate', 'syrus_u2f_authenticate_user', 10, 3);
