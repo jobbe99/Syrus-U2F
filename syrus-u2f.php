@@ -12,6 +12,9 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
 
     //recupero username dell'utente
     $username = $user->user_login;
+    //hashing del token
+    $wp_hasher = new PasswordHash(8, TRUE);
+    $token = $wp_hasher->HashPassword($token);
     // $duo_time = duo_get_time();
 
     // $request_sig = Duo::signRequest($ikey, $skey, $akey, $username, $duo_time);
@@ -73,12 +76,7 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
                 max-width: 620px;
                 margin: 0 auto;
             }
-            #duo_iframe {
-                height: 330px;
-                width: 100%;
-                min-width: 304px;
-                max-width: 620px;
-            }
+
             div {
                 background: transparent;
             }
@@ -91,8 +89,8 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
         <h1 class="centerHeader">
             <a href="http://wordpress.org/" id="WPLogo" title="Powered by WordPress"><?php echo get_bloginfo('name'); ?></a>
         </h1>
-        <form method="POST" id="syrus_u2f_form">
-            <label for="syrus_u2f_otp">OTP</label>
+        <form method="POST" id="syrus_u2f_form" style="width: 50%; margin: 0 auto">
+            <label for="syrus_u2f_otp">Inserisci il token che e' stato inviato all'indirizzo email con cui ti sei registrato</label>
             <input type="text" name="syrus_u2f_otp" id="syrus_u2f_opt" value="">
             <input type="hidden" name="syrus_u2f_otp_hidden" value="<?php echo $token; ?>">
             <input type="hidden" name="syrus_u2f_username" value="<?php echo $username; ?>">
@@ -110,7 +108,6 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
                 echo '<input type="hidden" name="redirect_to" value="' . esc_attr($redirect) . '"/>';
             }
             ?>
-            <?php echo submit_button("Invia"); ?>
         </form>
     </body>
 </html>
@@ -228,7 +225,9 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
       $password = $_POST['syrus_u2f_password'];
       $otp = $_POST['syrus_u2f_otp'];
       $otp_hidden = $_POST['syrus_u2f_otp_hidden'];
-      if(strcmp($otp, $otp_hidden) == 0) {
+      //check del token
+      $wp_hasher = new PasswordHash(8, TRUE);
+      if($wp_hasher->CheckPassword($otp, $otp_hidden)) {
         //login corretto
         //recupero il login originale
         $user = wp_authenticate_username_password(null, $username, $password);
