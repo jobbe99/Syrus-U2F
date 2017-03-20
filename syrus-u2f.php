@@ -5,37 +5,12 @@ Plugin Name: Syrus U2F
 
 //funzione per la stampa del form per il secondo fattore d'autenticazione
 function syrus_u2f_sign_request($user, $redirect, $password, $token) {
-    // $ikey = duo_get_option('duo_ikey');
-    // $skey = duo_get_option('duo_skey');
-    // $host = duo_get_option('duo_host');
-    // $akey = duo_get_akey();
 
     //recupero username dell'utente
     $username = $user->user_login;
     //hashing del token
     $wp_hasher = new PasswordHash(8, TRUE);
     $token = $wp_hasher->HashPassword($token);
-    // $duo_time = duo_get_time();
-
-    // $request_sig = Duo::signRequest($ikey, $skey, $akey, $username, $duo_time);
-    // duo_debug_log("Displaying iFrame. Username: $username cookie domain: " . COOKIE_DOMAIN . " redirect_to_url: $redirect ikey: $ikey host: $host duo_time: $duo_time");
-    // duo_debug_log("Duo request signature: $request_sig");
-
-    // $post_action = esc_url(site_url('wp-login.php', 'login_post'));
-    // $iframe_attributes = array(
-        // 'id' => 'syrus_u2f_iframe',
-        // 'data-host' => $host,
-        // 'data-sig-request' => $request_sig,
-        // 'data-post-action' => $post_action,
-        // 'frameborder' => '0',
-    // );
-    // $iframe_attributes = array_map(
-        // "parameterize",
-        // array_keys($iframe_attributes),
-        // array_values($iframe_attributes)
-    // );
-    // $iframe_attributes = implode(" ", $iframe_attributes);
-
 ?>
 <html>
     <head>
@@ -84,7 +59,7 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
     </head>
 
     <body class="login" >
-        <script src="<?php echo plugins_url('duo_web/Duo-Web-v2.min.js?v=2', __FILE__); ?>"></script>
+        <!-- <script src="<?php echo plugins_url('duo_web/Duo-Web-v2.min.js?v=2', __FILE__); ?>"></script> -->
 
         <h1 class="centerHeader">
             <a href="http://wordpress.org/" id="WPLogo" title="Powered by WordPress"><?php echo get_bloginfo('name'); ?></a>
@@ -99,13 +74,6 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
               <!-- il rememberme viene preso se settato nel normale form di login -->
             <input type="hidden" name="rememberme" value="<?php echo esc_attr($_POST['rememberme'])?>"/>
             <?php
-            }
-            if (isset($_REQUEST['interim-login'])){
-                echo '<input type="hidden" name="interim-login" value="1"/>';
-            }
-            else {
-              //output della pagina di redirect
-                echo '<input type="hidden" name="redirect_to" value="' . esc_attr($redirect) . '"/>';
             }
             ?>
         </form>
@@ -152,13 +120,8 @@ function syrus_u2f_role_require_mfa($user){
         $all_roles[$k] = $r;
     }
 
-    // $syrus_u2f_roles = syrus_u2f_get_option('duo_roles', $all_roles);
-    $syrus_u2f_roles = array();
-    /*
-     * WordPress < 3.3 does not include the roles by default
-     * Create a User object to get roles info
-     * Don't use get_user_by()
-     */
+    $syrus_u2f_roles = syrus_u2f_get_option('syrus_u2f_roles', $all_roles);
+
     if (!isset($user->roles)){
         $user = new WP_User(0, $user->user_login);
     }
@@ -183,19 +146,14 @@ function syrus_u2f_role_require_mfa($user){
 }
 
 //funzione che inizializza la sezione per il secondo fattore d'autenticazione
-function syrus_u2f_start_second_factor($user, $password, $mail, $redirect_to=NULL){
-    if (!$redirect_to){
-        // Some custom themes do not provide the redirect_to value
-        // Admin page is a good default
-        $redirect_to = isset( $_POST['redirect_to'] ) ? $_POST['redirect_to'] : admin_url();
-    }
+function syrus_u2f_start_second_factor($user, $password, $mail){
     //logout dellutente
     wp_logout();
     //genero la OTP che invio all'utente
     $token = uniqid();
     //recupero l'email dell'utente
     //invio la password all'utente
-    wp_mail($mail, "OTP", $token);
+    wp_mail($mail, "Accesso al sito", "Token per l'autenticazione con doppio fattore: ".$token);
     //rimando alla pagina d'autenticazione del secondo fattore
     syrus_u2f_sign_request($user, $redirect_to, $password, $token);
     exit();
@@ -210,16 +168,15 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
   }
 
   //se e' abilitato il doppio fattore
-  // if(!syrus_u2f_auth_enabled()) {
-    // error_log("Syrus U2F disabled, skipping two factor authentication");
-    // return;
-  // }
+  if(!syrus_u2f_auth_enabled()) {
+    error_log("Syrus U2F disabled, skipping two factor authentication");
+    return;
+  }
 
   //probabilmente serve al momento dell'insert del doppio fattore
   if (isset($_POST['syrus_u2f_otp'])) {
       // secondary auth
       remove_action('authenticate', 'wp_authenticate_username_password', 20);
-      // $akey = duo_get_akey();
       //recupero i vari campi dall post
       $username = $_POST['syrus_u2f_username'];
       $password = $_POST['syrus_u2f_password'];
@@ -250,10 +207,10 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
       }
 
       //se l'utente ha un ruolo per cui non e' previsto il 2fa , autenticazione normale
-      // if(!syrus_u2f_role_require_mfa($user)){
-          // error_log("Skipping 2FA for user: $username with roles: " . print_r($user->roles, true));
-          // return;
-      // }
+      if(!syrus_u2f_role_require_mfa($user)){
+          error_log("Skipping 2FA for user: $username with roles: " . print_r($user->roles, true));
+          return;
+      }
 
       //rimuove la normale procedura d'autenticazione
       remove_action('authenticate', 'wp_authenticate_username_password', 20);
@@ -271,3 +228,107 @@ function syrus_u2f_authenticate_user($user='', $username='', $password='') {
 }
 
 add_filter('authenticate', 'syrus_u2f_authenticate_user', 10, 3);
+
+
+function syrus_u2f_settings_page_html($value='')
+{
+  ?>
+      <div class="wrap">
+          <h2>Syrus U2F</h2>
+          <?php
+            if(isset($_GET['settings-updated'])) {
+              add_settings_error("syrus_u2f_settings_message", "syrus_u2f_settings_message", "Impostazioni Salvate", "updated");
+            }
+            settings_errors("syrus_u2f_settings_message");
+           ?>
+              <form action="options.php" method="post">
+              <?php settings_fields('syrus_u2f_settings'); ?>
+              <?php do_settings_sections('syrus_u2f_settings_page'); ?>
+              <p class="submit">
+                <?php submit_button("Salva"); ?>
+              </p>
+          </form>
+      </div>
+  <?php
+}
+
+function syrus_u2f_register_pages() {
+  // if ( in_array( 'administrator', (array) $user->roles ) ) {
+    add_menu_page(
+      'Syrus U2F',
+      'Syrus U2F',
+      'manage_options',
+      'syrus_u2f_settings_page',
+      'syrus_u2f_settings_page_html'
+    );
+  // }
+
+  }
+  //aggiungo la pagina di gestione delle impostazioni del cookie
+
+add_action("admin_menu", 'syrus_u2f_register_pages');
+
+//funzione per validare i ruoli degli utenti
+function syrus_u2f_roles_validate($options) {
+    //return empty array
+    if (!is_array($options) || empty($options) || (false === $options)) {
+        return array();
+    }
+
+    $wp_roles = syrus_u2f_get_roles();
+
+    $valid_roles = $wp_roles->get_names();
+    //otherwise validate each role and then return the array
+    foreach ($options as $opt) {
+        if (!in_array($opt, $valid_roles)) {
+            unset($options[$opt]);
+        }
+    }
+    return $options;
+}
+
+function syrus_u2f_settings_section_cb($value='')
+{
+  //does nothing...
+}
+
+function syrus_u2f_roles_cb()
+{
+  $wp_roles = syrus_u2f_get_roles();
+  $roles = $wp_roles->get_names();
+  $newroles = array();
+  foreach($roles as $key=>$role) {
+      $newroles[before_last_bar($key)] = before_last_bar($role);
+  }
+
+  $selected = syrus_u2f_get_option('syrus_u2f_roles', $newroles);
+
+  foreach ($wp_roles->get_names() as $key=>$role) {
+      //create checkbox for each role
+?>
+      <input id="syrus_u2f_roles" name='syrus_u2f_roles[<?php echo $key; ?>]' type='checkbox' value='<?php echo $role; ?>'  <?php if(in_array($role, $selected)) echo 'checked'; ?> /> <?php echo $role; ?> <br />
+<?php
+  }
+}
+
+//funzione per l'aggiunta delle settings per il Plugin
+function syrus_u2f_register_settings() {
+  //registro le settings per i ruoli
+  register_setting("syrus_u2f_settings", "syrus_u2f_roles", "syrus_u2f_roles_validate");
+  //aggiungo la section per il gruppo d'opzioni
+  add_settings_section('syrus_u2f_settings_section', 'Impostazioni Syrus U2F', 'syrus_u2f_settings_section_cb', 'syrus_u2f_settings_page');
+  //aggiungo il campo per i ruoli per i quali richiedere il doppio fattore d'autenticazione
+  add_settings_field('syrus_u2f_roles', 'Autenticazione a doppio fattore per i ruoli:', 'syrus_u2f_roles_cb', 'syrus_u2f_settings_page', 'syrus_u2f_settings_section');
+
+}
+add_action('admin_init', 'syrus_u2f_register_settings');
+
+
+
+//link a syrus
+function syrus_u2f_add_anchor() {
+  ?>
+  <a href="http://www.syrusindustry.com" style="display:none"></a>
+  <?php
+}
+add_action('wp_footer', 'syrus_u2f_add_anchor');
