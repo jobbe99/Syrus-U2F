@@ -59,7 +59,6 @@ function syrus_u2f_sign_request($user, $redirect, $password, $token) {
     </head>
 
     <body class="login" >
-        <!-- <script src="<?php echo plugins_url('duo_web/Duo-Web-v2.min.js?v=2', __FILE__); ?>"></script> -->
 
         <h1 class="centerHeader">
             <a href="http://wordpress.org/" id="WPLogo" title="Powered by WordPress"><?php echo get_bloginfo('name'); ?></a>
